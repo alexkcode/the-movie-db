@@ -2,6 +2,7 @@ package com.moviedb.explorer.jobs;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -29,22 +30,16 @@ public class ImportMovies {
     @Value("${url}")
     public String server;
 
-    public RestTemplate getRest() {
-        return rest;
-    }
-
-    public void setRest(RestTemplate rest) {
-        this.rest = rest;
-    }
-
+    @Autowired
     public RestTemplate rest;
+
     public HttpHeaders headers;
+
     @Value("${api_key}")
     public String apiKey;
 
     public ImportMovies() {
         objectMapper = new ObjectMapper();
-        this.rest = new RestTemplate();
         this.headers = new HttpHeaders();
         headers.add("Content-Type", "application/json");
         headers.add("Accept", "*/*");
@@ -66,7 +61,7 @@ public class ImportMovies {
                 IntStream.rangeClosed(min, max)
                         .boxed()
                         .map(page -> CompletableFuture.supplyAsync(
-                             () -> getResultsByPage(params, "/discover/movies", page)))
+                                () -> getResultsByPage(params, "/discover/movies", page)))
                         .collect(Collectors.toList());
 
         return null;
@@ -112,11 +107,8 @@ public class ImportMovies {
     }
 
     public String get(String uri) {
-        HttpEntity<String> requestEntity = new HttpEntity<String>("", headers);
-        ResponseEntity<String> responseEntity = rest.exchange(server + uri,
-                                                              HttpMethod.GET,
-                                                              requestEntity,
-                                                              String.class);
+        ResponseEntity<String> responseEntity = rest.getForEntity(server + uri,
+                                                                  String.class);
         return responseEntity.getBody();
     }
 
