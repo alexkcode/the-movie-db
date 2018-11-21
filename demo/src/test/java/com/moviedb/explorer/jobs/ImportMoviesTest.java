@@ -1,6 +1,7 @@
 package com.moviedb.explorer.jobs;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.moviedb.explorer.Utility;
 import org.apache.commons.io.IOUtils;
 import org.junit.Before;
 import org.junit.Test;
@@ -59,19 +60,6 @@ public class ImportMoviesTest {
     }
 
     @Test
-    public void getShouldReturnNonNullResponse() throws IOException {
-        String singlePageResponse = IOUtils.toString(
-                this.getClass().getResourceAsStream("/single_page.json"),
-                "UTF-8"
-        );
-        ResponseEntity<String> response = new ResponseEntity<>(singlePageResponse,
-                                                               HttpStatus.ACCEPTED);
-        Mockito.when(restTemplate.getForEntity(Mockito.anyString(),
-                                               Mockito.any(Class.class))).thenReturn(response);
-        assertNotNull(testClass.get("http://test.com"));
-    }
-
-    @Test
     public void shouldGetIdFromJson() throws IOException {
         String json = IOUtils.toString(
                 this.getClass().getResourceAsStream("/single_result.json"),
@@ -87,7 +75,7 @@ public class ImportMoviesTest {
     public void shouldGetPageOfResults() {
         MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
         params.add("page", "1");
-        String results = testClass.getResultsByPage(params, "/discover/movies", 2).toString();
+        String results = testClass.getResultsByPage(params, "/discover/movie", 2).toString();
         assertFalse(results.isEmpty());
         boolean containsPage = results.contains("\"page\":");
         assertTrue(containsPage);
@@ -100,7 +88,7 @@ public class ImportMoviesTest {
     @Test
     public void shouldGetTotalPageNumber() {
         Optional<Integer> actual = testClass.getPageCount(new LinkedMultiValueMap<>(),
-                                                          "/discover/movies");
+                                                          "/discover/movie");
         Integer expected = 2;
         assertTrue(actual.isPresent());
         assertEquals(actual.get(), expected);
@@ -110,14 +98,14 @@ public class ImportMoviesTest {
     public void shouldCombineResults() {
         MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
         Function<Integer, Supplier<List<String>>> testSupplier = page -> () -> {
-            JsonNode results = testClass.getResultsByPage(params, "/discover/movies", page).get(
+            JsonNode results = testClass.getResultsByPage(params, "/discover/movie", page).get(
                     "results");
-            return testClass.getIdsByPage(results);
+            return ImportBase.getIdsByPage(results);
         };
-        List<String> actual = testClass.combinePageResults(testSupplier, 1, 2);
-        JsonNode resultsOne = testClass.getResultsByPage(params, "/discover/movies", 1)
+        List<String> actual = Utility.combinePageResults(testSupplier, 1, 2);
+        JsonNode resultsOne = testClass.getResultsByPage(params, "/discover/movie", 1)
                                        .get("results");
-        JsonNode resultsTwo = testClass.getResultsByPage(params, "/discover/movies", 2)
+        JsonNode resultsTwo = testClass.getResultsByPage(params, "/discover/movie", 2)
                                        .get("results");
 
         assertFalse(actual.isEmpty());
