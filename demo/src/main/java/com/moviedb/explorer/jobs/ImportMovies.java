@@ -2,11 +2,10 @@ package com.moviedb.explorer.jobs;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.NullNode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -17,96 +16,131 @@ import org.springframework.web.client.RestTemplate;
 import java.io.IOException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.IntStream;
 import java.util.stream.Collectors;
 import java.util.concurrent.CompletableFuture;
 
 public class ImportMovies {
 
-    ObjectMapper objectMapper;
+    private final String path;
+    private ObjectMapper objectMapper;
+
     @Value("${url}")
-    public String server;
+    private String server;
 
     @Autowired
-    public RestTemplate rest;
+    private RestTemplate rest;
 
-    public HttpHeaders headers;
+    private HttpHeaders headers;
 
     @Value("${api_key}")
-    public String apiKey;
+    private String apiKey;
+
+    public ConcurrentLinkedQueue<IOException> getExceptions() {
+        return exceptions;
+    }
+
+    private ConcurrentLinkedQueue<IOException> exceptions;
 
     public ImportMovies() {
         objectMapper = new ObjectMapper();
         this.headers = new HttpHeaders();
         headers.add("Content-Type", "application/json");
         headers.add("Accept", "*/*");
+
+        exceptions = new ConcurrentLinkedQueue<IOException>();
+        path = "/discover/movies";
     }
 
     public List<String> getMovieIdsByDate(String start, String end) throws ParseException {
         Date startDate = new SimpleDateFormat("MM-dd-yyyy").parse(start);
         Date endDate = new SimpleDateFormat("MM-dd-yyyy").parse(end);
 
-        MultiValueMap<String, String> params = new LinkedMultiValueMap<String, String>();
+        MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
         params.add("release_date.gte", startDate.toString());
         params.add("release_date.lte", endDate.toString());
         params.add("api_key", apiKey);
 
-        Integer min = 1;
-        Integer max = 1;
+        int min = 1;
+        Optional<Integer> max = getPageCount(params, this.path);
 
-        List<CompletableFuture<String>> futures =
-                IntStream.rangeClosed(min, max)
-                        .boxed()
-                        .map(page -> CompletableFuture.supplyAsync(
-                                () -> getResultsByPage(params, "/discover/movies", page)))
-                        .collect(Collectors.toList());
-
-        return null;
+        return combinePageResults(page -> () -> {
+            JsonNode results = getResultsByPage(params, this.path, page).get("results");
+            return getIdsByPage(results);
+        }, min, max.orElse(1));
     }
 
-    public Integer getPageCount(MultiValueMap<String, String> params, String path) {
-
-        return null;
+    public Optional<Integer> getPageCount(MultiValueMap<String, String> params, String path) {
+        return Optional.of(getResultsByPage(params, this.path, 1).get(
+                "total_pages").asInt());
     }
 
-    public String getMovieId(String json) throws IOException {
+    String getMovieId(String json) throws IOException {
         JsonNode jsonNode = objectMapper.readTree(json);
-        String movieId = jsonNode.get("id").asText();
-        return movieId;
+        return jsonNode.get("id").asText();
     }
 
-    public String processAllPages(MultiValueMap<String, String> params, String path) {
-
-        Integer min = 1;
-        Integer max = 1;
-
-        List<CompletableFuture<String>> futures =
+    List<String> combinePageResults(Function<Integer, Supplier<List<String>>> function, int min, int max) {
+        List<CompletableFuture<List<String>>> futures =
                 IntStream.rangeClosed(min, max)
                         .boxed()
                         .map(page -> CompletableFuture.supplyAsync(
-                                () -> getResultsByPage(params, path, page)))
+                                function.apply(page)))
                         .collect(Collectors.toList());
-        return null;
+
+        Optional<List<String>> results = futures.stream()
+                .map(CompletableFuture::join)
+                .filter(Objects::nonNull)
+                .filter(a -> !a.isEmpty())
+                .reduce((a, b) -> {
+                    a.addAll(b);
+                    return a;
+                });
+
+        return results.orElse(Collections.emptyList());
     }
 
-    public String getResultsByPage(MultiValueMap<String, String> params, String path, Integer page) {
-        params.add("page", page.toString());
-        UriComponents uriComponents = UriComponentsBuilder.fromPath(path).queryParams(params).build();
+    public List<String> combinePageResultsParallel(Function<Integer, Supplier<List<String>>> function, int min, int max) {
+        Optional<List<String>> results = IntStream.rangeClosed(min, max)
+                .parallel()
+                .boxed()
+                .map(page -> function.apply(page).get())
+                .filter(Objects::nonNull)
+                .filter(a -> !a.isEmpty())
+                .reduce((a, b) -> {
+                    a.addAll(b);
+                    return a;
+                });
+
+        return results.orElse(Collections.emptyList());
+    }
+
+    public JsonNode getResultsByPage(MultiValueMap<String, String> params, String path, Integer page) {
+        MultiValueMap<String, String> newParams = new LinkedMultiValueMap<>(params);
+        newParams.add("page", page.toString());
+        UriComponents uriComponents = UriComponentsBuilder.fromPath(path).queryParams(newParams).build();
         String response = this.get(uriComponents.toUriString());
-        String results = "";
+        JsonNode jsonNode = NullNode.getInstance();
         try {
-            JsonNode jsonNode = objectMapper.readTree(response);
-            results = jsonNode.get("results").asText();
+            jsonNode = objectMapper.readTree(response);
         } catch (IOException e) {
-            e.printStackTrace();
+            exceptions.add(e);
         }
-        return results;
+        return jsonNode;
     }
 
-    public String get(String uri) {
+    List<String> getIdsByPage(JsonNode resultPage) {
+        return resultPage.findValues("id").stream()
+                .map(JsonNode::asText)
+                .collect(Collectors.toList());
+    }
+
+    String get(String uri) {
+        System.out.println("URI : " + uri);
         ResponseEntity<String> responseEntity = rest.getForEntity(server + uri,
                                                                   String.class);
         return responseEntity.getBody();
