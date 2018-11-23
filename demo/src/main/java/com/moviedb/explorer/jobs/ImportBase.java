@@ -19,16 +19,19 @@ import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.stream.Collectors;
 
 public class ImportBase {
+
     private String path;
+
     ObjectMapper objectMapper;
+
     @Value("${api.key}")
     private String apiKey;
     private ConcurrentLinkedQueue<IOException> exceptions;
     @Value("${url}")
     private String server;
+
     @Autowired
     private RestTemplate rest;
 
@@ -37,9 +40,15 @@ public class ImportBase {
         exceptions = new ConcurrentLinkedQueue<IOException>();
     }
 
+    public String getApiKey() { return apiKey; }
+
+    public String getServer() { return server; }
+
     public ConcurrentLinkedQueue<IOException> getExceptions() {
         return exceptions;
     }
+
+    public RestTemplate getRest() { return rest; }
 
     public Optional<Integer> getPageCount(MultiValueMap<String, String> params, String path) {
         return Optional.of(getResultsByPage(params, path, 1).get(
@@ -49,12 +58,16 @@ public class ImportBase {
     public JsonNode getResultsByPage(MultiValueMap<String, String> params, String path,
                                      Integer page) {
         MultiValueMap<String, String> newParams = new LinkedMultiValueMap<>(params);
+        newParams.add("api_key", apiKey);
         newParams.add("page", page.toString());
-        UriComponents uriComponents = UriComponentsBuilder.fromPath(path)
+        UriComponents uriComponents = UriComponentsBuilder
+                .fromPath(server)
+                .pathSegment(path)
                 .queryParams(newParams)
                 .build();
-        String response = rest.getForEntity(server + uriComponents,
+        String response = rest.getForEntity(uriComponents.toUriString(),
                                             String.class).getBody();
+        System.out.println(uriComponents);
         JsonNode jsonNode = NullNode.getInstance();
         try {
             jsonNode = objectMapper.readTree(response);
@@ -64,13 +77,11 @@ public class ImportBase {
         return jsonNode;
     }
 
-    public static List<String> getIdsByPage(JsonNode resultPage) {
-        return resultPage.findValues("id").stream()
-                .map(JsonNode::asText)
-                .collect(Collectors.toList());
+    public static List<String> getIds(JsonNode resultPage) {
+        return resultPage.findValuesAsText("id");
     }
 
-    public List<String> getIdsByDate(String start, String end) throws ParseException {
+    public List<String> getIdsByDate(String start, String end, String path) throws ParseException {
         Date startDate = new SimpleDateFormat("MM-dd-yyyy").parse(start);
         Date endDate = new SimpleDateFormat("MM-dd-yyyy").parse(end);
 
@@ -80,11 +91,11 @@ public class ImportBase {
         params.add("api_key", apiKey);
 
         int min = 1;
-        Optional<Integer> max = getPageCount(params, this.path);
+        Optional<Integer> max = getPageCount(params, path);
 
         return Utility.combinePageResults(page -> () -> {
-            JsonNode results = getResultsByPage(params, this.path, page).get("results");
-            return ImportBase.getIdsByPage(results);
+            JsonNode results = getResultsByPage(params, path, page).get("results");
+            return ImportBase.getIds(results);
         }, min, max.orElse(1));
     }
 }
