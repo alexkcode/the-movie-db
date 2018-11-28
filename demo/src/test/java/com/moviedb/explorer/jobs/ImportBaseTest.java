@@ -1,15 +1,15 @@
 package com.moviedb.explorer.jobs;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.moviedb.explorer.AppConfig;
 import com.moviedb.explorer.Utility;
+import com.nurkiewicz.asyncretry.RetryExecutor;
 import org.apache.commons.io.IOUtils;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.mockito.*;
 import org.mockito.junit.MockitoJUnitRunner;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpStatus;
@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.stream.IntStream;
 
 import static org.junit.Assert.*;
 
@@ -37,11 +38,15 @@ public class ImportBaseTest {
     @Mock
     RestTemplate restTemplate;
 
+    @Spy
+    AppConfig config;
+
     @Before
     public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
 
-        ReflectionTestUtils.setField(testClass, "server", "hhtp://api.themoviedb.org/3/");
+        ReflectionTestUtils.setField(testClass, "server", "http://api.themoviedb.org/3/");
+        ReflectionTestUtils.setField(testClass, "objectMapper", new ObjectMapper());
 
         String pageOneString = IOUtils.toString(
                 this.getClass().getResourceAsStream("/page1.json"),
@@ -60,6 +65,8 @@ public class ImportBaseTest {
                                                Mockito.any(Class.class))).thenReturn(responseOne);
         Mockito.when(restTemplate.getForEntity(Mockito.contains("page=2"),
                                                Mockito.any(Class.class))).thenReturn(responseTwo);
+
+//        Mockito.when(config.getRetryExecutor()).thenReturn(null);
     }
 
     @Test
@@ -92,7 +99,8 @@ public class ImportBaseTest {
                     "results");
             return ImportBase.getIds(results);
         };
-        List<String> actual = Utility.combinePageResults(testSupplier, 1, 2);
+        List<String> actual = Utility.combinePageResults(testSupplier, config.getRetryExecutor(),
+                                                         IntStream.rangeClosed(1, 2).boxed());
         JsonNode resultsOne = testClass.getResultsByPage(params, "discover/movie", 1)
                                        .get("results");
         JsonNode resultsTwo = testClass.getResultsByPage(params, "discover/movie", 2)

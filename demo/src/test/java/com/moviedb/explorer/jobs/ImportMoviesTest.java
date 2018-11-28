@@ -13,17 +13,12 @@ import org.mockito.junit.MockitoJUnitRunner;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.List;
-
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 @RunWith(MockitoJUnitRunner.class)
-//@RunWith(SpringJUnit4ClassRunner.class)
-//@ContextConfiguration(classes = ImportMovies.class)
-//@TestPropertySource("classpath:application.properties")
 public class ImportMoviesTest {
 
     @InjectMocks
@@ -53,7 +48,7 @@ public class ImportMoviesTest {
 
     @Test
     public void shouldGetListOfCredits() {
-        JsonNode actual = testClass.getCredits("363992", new LinkedMultiValueMap<String, String>());
+        JsonNode actual = testClass.getCredits("363992");
 
         assertNotNull(actual);
         assertTrue(actual.elements().next().has("cast_id"));
