@@ -20,9 +20,6 @@ public class ImportShows extends ImportBase {
     @Value("${tv.path}")
     private String showsPath;
 
-    @Value("${credits.path}")
-    private String creditsPath;
-
     public List<String> getShowIdsByDate(String start, String end) throws ParseException {
         return getIdsByDate(start, end, this.path);
     }

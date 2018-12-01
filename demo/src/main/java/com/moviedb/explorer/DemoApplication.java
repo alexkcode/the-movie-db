@@ -14,7 +14,6 @@ import org.springframework.web.client.RestTemplate;
 import java.text.ParseException;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 @SpringBootApplication
@@ -41,15 +40,20 @@ public class DemoApplication implements ApplicationRunner {
         try {
             List<String> movieIds = importMovies.getMovieIdsByDate("2017-12-01", "2017-12-31");
             log.info(String.valueOf("number of movie IDs: " + movieIds.size()));
-            List<String> castIds = importMovies.getAllCastIds(movieIds);
-            log.info(String.valueOf("number of credit IDs: " + castIds.size()));
-            List<String> showIds = importShows.getShowIdsByDate("2017-12-01", "2017-12-31");
-            castIds.addAll(importMovies.getAllCastIds(showIds));
-
-            List<String> distinctCastIds = castIds.parallelStream()
+            List<String> movieCastIds = importMovies.getAllCastIds(movieIds)
+                    .parallelStream()
                     .distinct()
                     .collect(Collectors.toList());
-            log.info("total number of cast members in movies, shows in December" + distinctCastIds.size());
+            log.info(String.valueOf("number of movie cast IDs: " + movieCastIds.size()));
+            HashSet<String> movieCastSet = new HashSet<>(movieCastIds);
+            List<String> showIds = importShows.getShowIdsByDate("2017-12-01", "2017-12-31");
+            List<String> commonCastIds = importShows.getCommonCastIds(showIds, movieCastSet)
+                    .parallelStream()
+                    .distinct()
+                    .collect(Collectors.toList());
+
+            log.info("total number of cast members in movies, shows in December"
+                             + commonCastIds.size());
         } catch (ParseException e) {
             log.error(e.getMessage());
         }

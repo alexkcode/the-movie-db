@@ -22,10 +22,14 @@ import java.io.IOException;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 @Component
@@ -97,7 +101,6 @@ public abstract class ImportBase {
 
         String response = rest.getForEntity(uriComponents.toUriString(),
                                             String.class).getBody();
-        log.info(response);
         JsonNode jsonNode = NullNode.getInstance();
         try {
             jsonNode = objectMapper.readTree(response);
@@ -125,9 +128,10 @@ public abstract class ImportBase {
         Optional<Integer> max = getPageCount(params, path);
 
         return Utility.combinePageResults(page -> () -> {
+            log.info("Working on page " + page + " of " + max.orElse(1));
             JsonNode results = getResultsByPage(params, path, page).get("results");
             return ImportBase.getIds(results);
-        }, config.getRetryExecutor(), IntStream.rangeClosed(min, max.orElse(1)).boxed());
+        }, config.getLongRetryExecutor(), IntStream.rangeClosed(min, max.orElse(1)).boxed());
     }
 
     String getId(String json) throws IOException {
@@ -144,9 +148,6 @@ public abstract class ImportBase {
                 .build();
         ResponseEntity<String> responseEntity = getRest().getForEntity(uriComponents.toUriString(),
                                                                        String.class);
-        log.info("X-RateLimit-Limit" + responseEntity.getHeaders()
-                .get("X-RateLimit-Limit")
-                .toString());
         log.info("X-RateLimit-Remaining" + responseEntity.getHeaders()
                 .get("X-RateLimit-Remaining")
                 .toString());
@@ -158,12 +159,24 @@ public abstract class ImportBase {
             getExceptions().add(e);
         }
         return NullNode.getInstance();
-    };
+    }
+
+    ;
 
     public abstract JsonNode getCredits(String id);
 
     public List<String> getAllCastIds(List<String> ids) {
         return Utility.combinePageResults(id -> () -> getCredits(id).findValuesAsText("cast_id"),
+                                          getConfig().getLongRetryExecutor(),
+                                          ids.stream());
+    }
+
+    public List<String> getCommonCastIds(List<String> ids, Collection<String> otherIds) {
+        Function<String, Supplier<List<String>>> func = id -> () -> getCredits(id)
+                .findValuesAsText("cast_id")
+                .parallelStream()
+                .filter(otherIds::contains).collect(Collectors.toList());
+        return Utility.combinePageResults(func,
                                           getConfig().getLongRetryExecutor(),
                                           ids.stream());
     }

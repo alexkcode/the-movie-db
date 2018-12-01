@@ -27,43 +27,12 @@ public class ImportMovies extends ImportBase {
     @Value("${movies.path}")
     private String moviesPath;
 
-    @Value("${credits.path}")
-    private String creditsPath;
-
     public List<String> getMovieIdsByDate(String start, String end) throws ParseException {
         return getIdsByDate(start, end, this.discoverPath);
     }
 
     public JsonNode getCredits(String id) {
-        MultiValueMap<String, String> newParams = new LinkedMultiValueMap<>();
-        newParams.add("api_key", getApiKey());
-        UriComponents uriComponents = UriComponentsBuilder
-                .fromHttpUrl(getServer())
-                .pathSegment(moviesPath, id, creditsPath)
-                .queryParams(newParams)
-                .build();
-        ResponseEntity<String> responseEntity = getRest().getForEntity(uriComponents.toUriString(),
-                                                                       String.class);
-        log.info("X-RateLimit-Limit" + responseEntity.getHeaders()
-                .get("X-RateLimit-Limit")
-                .toString());
-        log.info("X-RateLimit-Remaining" + responseEntity.getHeaders()
-                .get("X-RateLimit-Remaining")
-                .toString());
-        String response = responseEntity.getBody();
-        try {
-            JsonNode jsonNode = getObjectMapper().readTree(response);
-            return jsonNode.get("cast");
-        } catch (IOException e) {
-            getExceptions().add(e);
-        }
-        return NullNode.getInstance();
+        return getCreditsByIdAndPath(id, moviesPath);
     }
-//
-//    public List<String> getAllCastIds(List<String> ids) {
-//        return Utility.combinePageResults(id -> () -> getCredits(id).findValuesAsText("cast_id"),
-//                                          getConfig().getLongRetryExecutor(),
-//                                          ids.stream());
-//    }
 
 }

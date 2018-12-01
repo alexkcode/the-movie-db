@@ -25,8 +25,8 @@ public class Utility {
 
         Optional<List<String>> results = futures.stream()
                 .map(CompletableFuture::join)
-                .filter(Objects::nonNull)
-                .filter(a -> !a.isEmpty())
+//                .filter(Objects::nonNull)
+//                .filter(a -> !a.isEmpty())
                 .reduce((a, b) -> {
                     a.addAll(b);
                     return a;

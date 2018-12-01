@@ -40,8 +40,8 @@ public class AppConfig {
         return new AsyncRetryExecutor(scheduler).
                 retryOn(CompletionException.class).
                 retryOn(HttpClientErrorException.class).
-                withExponentialBackoff(10000, 2).     //10s times 2 after each retry
-                withMaxRetries(10);
+                withFixedBackoff(10000).     //10s times 2 after each retry
+                withMaxRetries(100);
     }
 
     public RetryExecutor getLongRetryExecutor() {
@@ -49,7 +49,9 @@ public class AppConfig {
         return new AsyncRetryExecutor(scheduler).
                 retryOn(CompletionException.class).
                 retryOn(HttpClientErrorException.class).
-                withExponentialBackoff(60000, 2).     //1m times 2 after each retry
-                withMaxRetries(10);
+//                withExponentialBackoff(10000, 2).     //1m times 2 after each retry
+                withFixedBackoff(11000).
+                withMaxRetries(1000);
+//                retryInfinitely();
     }
 }
